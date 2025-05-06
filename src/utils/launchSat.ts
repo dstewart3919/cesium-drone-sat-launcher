@@ -1,53 +1,76 @@
-import * as Cesium from 'cesium';
-import { vecSafe } from './vecSafe';
+import * as Cesium from "cesium";
+import { vecSafe } from "./vecSafe";
 
 export let activeSats: any[] = [];
 
-export function launchSatellites(viewer: Cesium.Viewer, count: number, thrust = 600, burnTime = 5) {
-  activeSats = activeSats.filter(s => !s.dead);
+export function launchSatellites(
+  viewer: Cesium.Viewer,
+  count: number,
+  thrust = 600,
+  burnTime = 5,
+) {
+  activeSats = activeSats.filter((s) => !s.dead);
+
+  const center = Cesium.Cartesian3.fromDegrees(
+    0,
+    0,
+    Cesium.Math.nextRandomNumber() * 100 + 10,
+  );
 
   for (let i = 0; i < count; i++) {
-    // Pick a random launch position ~1km above surface
-    const lat = Cesium.Math.nextRandomNumber() * 180 - 90;
-    const lon = Cesium.Math.nextRandomNumber() * 360 - 180;
-    const surface = Cesium.Cartesian3.fromDegrees(lon, lat);
-    const up = vecSafe(surface);
-    const center = Cesium.Cartesian3.multiplyByScalar(up, 6371000 + 1000, new Cesium.Cartesian3()); // Earth radius + 1km
+    const offset = Cesium.Cartesian3.fromElements(
+      Cesium.Math.nextRandomNumber() * 5000,
+      Cesium.Math.nextRandomNumber() * 5000,
+      0,
+      new Cesium.Cartesian3(),
+    );
+    const pos = Cesium.Cartesian3.add(center, offset, new Cesium.Cartesian3());
 
-    // Tangent vector for angle offset
-    const tangent = Cesium.Cartesian3.cross(up, Cesium.Cartesian3.UNIT_Y, new Cesium.Cartesian3());
-
-    // Launch direction between 45–90° from up vector
-    const angle = Cesium.Math.toRadians(45 + Cesium.Math.nextRandomNumber() * 45);
-    const burnDir = Cesium.Cartesian3.normalize(
-      Cesium.Cartesian3.add(
-        Cesium.Cartesian3.multiplyByScalar(up, Math.cos(angle), new Cesium.Cartesian3()),
-        Cesium.Cartesian3.multiplyByScalar(tangent, Math.sin(angle), new Cesium.Cartesian3()),
-        new Cesium.Cartesian3()
+    const burnVector = vecSafe(
+      new Cesium.Cartesian3(
+        Cesium.Math.nextRandomNumber() * thrust * 0.3,
+        Cesium.Math.nextRandomNumber() * thrust * 0.3,
+        thrust,
       ),
-      new Cesium.Cartesian3()
     );
 
-    const burnVector = Cesium.Cartesian3.multiplyByScalar(burnDir, thrust, new Cesium.Cartesian3());
-
-    const pos = Cesium.Cartesian3.clone(center);
-
     const entity = viewer.entities.add({
-      position: pos,
+      position: new Cesium.ConstantPositionProperty(pos),
       point: {
         pixelSize: 8,
-        color: Cesium.Color.YELLOW
-      }
+        color: Cesium.Color.YELLOW,
+      },
+      ellipsoid: {
+        radii: new Cesium.Cartesian3(500, 500, 500),
+        material: Cesium.Color.YELLOW.withAlpha(0.7),
+        show: true,
+      },
+    });
+
+    const trail = viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => {
+          return trailPositions.length > 1
+            ? trailPositions
+            : [
+                pos,
+                Cesium.Cartesian3.add(
+                  pos,
+                  new Cesium.Cartesian3(1, 1, 1),
+                  new Cesium.Cartesian3(),
+                ),
+              ];
+        }, false),
+        width: 3,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.3,
+          color: Cesium.Color.YELLOW,
+        }),
+        show: true,
+      },
     });
 
     const trailPositions: Cesium.Cartesian3[] = [pos];
-    const trail = viewer.entities.add({
-      polyline: {
-        positions: new Cesium.CallbackProperty(() => trailPositions, false),
-        width: 2,
-        material: Cesium.Color.YELLOW
-      }
-    });
 
     activeSats.push({
       position: pos,
@@ -57,8 +80,8 @@ export function launchSatellites(viewer: Cesium.Viewer, count: number, thrust = 
       trailEntity: trail,
       trailPositions,
       entity,
-      status: 'idle',
-      dead: false
+      status: "idle",
+      dead: false,
     });
   }
 
