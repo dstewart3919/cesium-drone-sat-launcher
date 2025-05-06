@@ -27,7 +27,10 @@ function App() {
     const setupViewer = async () => {
       try {
         const { viewer } = await initCesiumViewer(viewerRef.current!);
-        if (destroyed) return;
+        if (destroyed) {
+          viewer.destroy();
+          return;
+        }
         viewerInstanceRef.current = viewer;
 
         viewer.clock.onTick.addEventListener(() => {
