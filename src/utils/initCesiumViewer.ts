@@ -28,6 +28,7 @@ export async function initCesiumViewer(
   viewer.scene.globe.baseColor = Cesium.Color.DARKGRAY;
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.scene.light = new Cesium.SunLight();
+  viewer.scene.sunBloom = true;
 
   // Set camera to neutral Earth orbit view (1000 km above equator)
   viewer.scene.camera.setView({
