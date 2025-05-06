@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import "./App.css";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
+import "./App.css";
 import { initCesiumViewer } from "./utils/initCesiumViewer";
 import { launchSatellites, activeSats } from "./utils/launchSat";
 import {
   jumpToNextSatellite,
-  attachChaseCamera,
   startChaseCamera,
 } from "./utils/CameraSatCycle";
 import { vecSafe } from "./utils/vecSafe";
@@ -16,7 +14,7 @@ const G = 6.6743e-11;
 const EARTH_MASS = 5.972e24;
 const EARTH_RADIUS = 6.371e6;
 
-function SatelliteSimulation() {
+function App() {
   const viewerRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<Cesium.Viewer | null>(null);
   const [thrustPower, setThrustPower] = useState(600);
@@ -31,18 +29,6 @@ function SatelliteSimulation() {
         const { viewer } = await initCesiumViewer(viewerRef.current!);
         if (destroyed) return;
         viewerInstanceRef.current = viewer;
-
-        startChaseCamera(viewer);
-        attachChaseCamera(viewer);
-
-        try {
-          await Promise.race([
-            (viewer.scene.globe as any).readyPromise,
-            new Promise((_, reject) => setTimeout(() => reject("timeout"), 5000)),
-          ]);
-        } catch (err) {
-          console.warn("Globe not ready in time:", err);
-        }
 
         viewer.clock.onTick.addEventListener(() => {
           const dt = 1;
@@ -173,83 +159,88 @@ function SatelliteSimulation() {
         <div ref={viewerRef} style={{ width: "100%", height: "100%" }} />
       </div>
 
-      <div style={{
-        position: "absolute",
-        top: 20,
-        left: 20,
-        zIndex: 100,
-        background: "rgba(0,0,0,0.8)",
-        padding: "1em",
-        borderRadius: "10px",
-        color: "#fff",
-        userSelect: "none",
-        WebkitUserSelect: "none",
-        boxShadow: "0 0 10px rgba(0,0,0,0.5)"
-      }}>
-        <div style={{ marginBottom: "0.5em" }}>
-          <label htmlFor="thrust">Thrust Power (m/s²): </label>
-          <input
-            id="thrust"
-            type="number"
-            value={thrustPower}
-            onChange={(e) => setThrustPower(Number(e.target.value))}
-            style={{ width: "60px" }}
-          />
-        </div>
-        <div style={{ marginBottom: "0.5em" }}>
-          <label htmlFor="burn">Burn Time (s): </label>
-          <input
-            id="burn"
-            type="number"
-            value={burnTime}
-            onChange={(e) => setBurnTime(Number(e.target.value))}
-            style={{ width: "60px" }}
-          />
-        </div>
-        <button
-          onClick={() => {
-            if (viewerInstanceRef.current) {
-              launchSatellites(viewerInstanceRef.current, 10, thrustPower, burnTime);
-            }
+      {/* Flicker-safe UI overlay */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 10,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 20,
+            left: 20,
+            pointerEvents: "auto",
+            background: "rgba(0,0,0,0.8)",
+            padding: "1em",
+            borderRadius: "10px",
+            color: "#fff",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            boxShadow: "0 0 10px rgba(0,0,0,0.5)",
           }}
-          style={{ marginRight: "0.5em", background: "#2a6d9e", border: "none", padding: "8px 12px" }}
         >
-          Launch 10 Sats
-        </button>
-        <button
-          onClick={() => {
-            if (viewerInstanceRef.current) {
-              jumpToNextSatellite(viewerInstanceRef.current);
-            }
-          }}
-          style={{ background: "#2a6d9e", border: "none", padding: "8px 12px" }}
-        >
-          Jump to Next Sat
-        </button>
-        <div style={{ marginTop: "10px" }}>
+          <div style={{ marginBottom: "0.5em" }}>
+            <label htmlFor="thrust">Thrust Power (m/s²): </label>
+            <input
+              id="thrust"
+              type="number"
+              value={thrustPower}
+              onChange={(e) => setThrustPower(Number(e.target.value))}
+              style={{ width: "60px" }}
+            />
+          </div>
+          <div style={{ marginBottom: "0.5em" }}>
+            <label htmlFor="burn">Burn Time (s): </label>
+            <input
+              id="burn"
+              type="number"
+              value={burnTime}
+              onChange={(e) => setBurnTime(Number(e.target.value))}
+              style={{ width: "60px" }}
+            />
+          </div>
           <button
             onClick={() => {
               if (viewerInstanceRef.current) {
-                startChaseCamera(viewerInstanceRef.current);
+                launchSatellites(viewerInstanceRef.current, 10, thrustPower, burnTime);
               }
             }}
-            style={{ marginRight: "0.5em", background: "#2a9e6d", border: "none", padding: "8px 12px" }}
+            style={{ marginRight: "0.5em", background: "#2a6d9e", border: "none", padding: "8px 12px" }}
           >
-            Enable Chase Camera
+            Launch 10 Sats
           </button>
+          <button
+            onClick={() => {
+              if (viewerInstanceRef.current) {
+                jumpToNextSatellite(viewerInstanceRef.current);
+              }
+            }}
+            style={{ background: "#2a6d9e", border: "none", padding: "8px 12px" }}
+          >
+            Jump to Next Sat
+          </button>
+          <div style={{ marginTop: "10px" }}>
+            <button
+              onClick={() => {
+                if (viewerInstanceRef.current) {
+                  startChaseCamera(viewerInstanceRef.current);
+                }
+              }}
+              style={{ marginRight: "0.5em", background: "#2a9e6d", border: "none", padding: "8px 12px" }}
+            >
+              Enable Chase Camera
+            </button>
+          </div>
         </div>
       </div>
     </>
-  );
-}
-
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<SatelliteSimulation />} />
-      </Routes>
-    </BrowserRouter>
   );
 }
 
