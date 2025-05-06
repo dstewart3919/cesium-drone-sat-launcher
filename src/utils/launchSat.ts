@@ -1,73 +1,60 @@
 import * as Cesium from 'cesium';
+import { vecSafe } from './vecSafe';
 
-export interface Satellite {
-  entity: Cesium.Entity;
-  trailEntity: Cesium.Entity;
-  position: Cesium.Cartesian3;
-  velocity: Cesium.Cartesian3;
-  acceleration: Cesium.Cartesian3;
-  burnTime: number;
-  status: 'orbiting' | 'escaping' | 'crashing';
-  trailPositions: Cesium.Cartesian3[];
-  dead?: boolean;
-}
+export let activeSats: any[] = [];
 
-export const activeSats: Satellite[] = [];
+export function launchSatellites(viewer: Cesium.Viewer, count: number, thrust = 600, burnTime = 5) {
+  activeSats = activeSats.filter(s => !s.dead);
 
-export function launchSatellites(
-  viewer: Cesium.Viewer,
-  count: number,
-  thrustPower: number = 600,
-  burnDuration: number = 5
-) {
+  const center = Cesium.Cartesian3.fromDegrees(0, 0, Cesium.Math.nextRandomNumber() * 100 + 10);
+
   for (let i = 0; i < count; i++) {
-    const lon = -80 + Math.random() * 2;
-    const lat = 0 + Math.random() * 2;
-    const height = 0;
-
-    const position = Cesium.Cartesian3.fromDegrees(lon, lat, height);
-
-    const up = Cesium.Cartesian3.normalize(position, new Cesium.Cartesian3());
-    const skew = Cesium.Cartesian3.fromElements(
-      (Math.random() - 0.5) * 0.1,
-      (Math.random() - 0.5) * 0.1,
-      (Math.random() - 0.5) * 0.1
-    );
-    const acceleration = Cesium.Cartesian3.add(
-      Cesium.Cartesian3.multiplyByScalar(up, thrustPower, new Cesium.Cartesian3()),
-      skew,
+    const offset = Cesium.Cartesian3.fromElements(
+      Cesium.Math.nextRandomNumber() * 5000,
+      Cesium.Math.nextRandomNumber() * 5000,
+      0,
       new Cesium.Cartesian3()
     );
+    const pos = Cesium.Cartesian3.add(center, offset, new Cesium.Cartesian3());
 
-    const satEntity = viewer.entities.add({
-      position: position,
+    const burnVector = vecSafe(
+      new Cesium.Cartesian3(
+        Cesium.Math.nextRandomNumber() * thrust * 0.3,
+        Cesium.Math.nextRandomNumber() * thrust * 0.3,
+        thrust
+      )
+    );
+
+    const entity = viewer.entities.add({
+      position: pos,
       point: {
         pixelSize: 8,
-        color: Cesium.Color.YELLOW.withAlpha(0.9),
-        heightReference: Cesium.HeightReference.NONE,
-      },
+        color: Cesium.Color.YELLOW
+      }
     });
 
-    const trailEntity = viewer.entities.add({
+    const trail = viewer.entities.add({
       polyline: {
-        positions: [],
-        width: 1.5,
-        material: Cesium.Color.GREEN.withAlpha(0.6),
-        clampToGround: false,
-      },
+        positions: new Cesium.CallbackProperty(() => trailPositions, false),
+        width: 2,
+        material: Cesium.Color.YELLOW
+      }
     });
 
-    const sat: Satellite = {
-      entity: satEntity,
-      trailEntity,
-      position,
-      velocity: new Cesium.Cartesian3(0, 0, 0),
-      acceleration,
-      burnTime: burnDuration,
-      status: 'orbiting',
-      trailPositions: [Cesium.Cartesian3.clone(position)],
-    };
+    const trailPositions: Cesium.Cartesian3[] = [pos];
 
-    activeSats.push(sat);
+    activeSats.push({
+      position: pos,
+      velocity: new Cesium.Cartesian3(0, 0, 0),
+      acceleration: burnVector,
+      burnTime,
+      trailEntity: trail,
+      trailPositions,
+      entity,
+      status: 'idle',
+      dead: false
+    });
   }
+
+  viewer.scene.requestRender();
 }

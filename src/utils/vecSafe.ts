@@ -1,28 +1,41 @@
 import * as Cesium from 'cesium';
 
-/** Return true when the Cartesian3 is defined and all components are finite numbers */
-export const isValidVec = (v?: Cesium.Cartesian3): boolean =>
-  Cesium.defined(v) &&
-  Number.isFinite(v.x) &&
-  Number.isFinite(v.y) &&
-  Number.isFinite(v.z);
+/**
+ * Returns a safe normalized vector. If the input is near-zero magnitude, it defaults to (0,0,1).
+ */
+export function vecSafe(vec: Cesium.Cartesian3): Cesium.Cartesian3 {
+  const magnitude = Cesium.Cartesian3.magnitude(vec);
+  if (magnitude < 1e-6) {
+    return new Cesium.Cartesian3(0, 0, 1);
+  }
+  return Cesium.Cartesian3.normalize(vec, new Cesium.Cartesian3());
+}
 
-/** Safe clone.  If v is bad, returns Cartesian3.ZERO so Cesium never crashes. */
-export const safeClone = (v?: Cesium.Cartesian3): Cesium.Cartesian3 =>
-  isValidVec(v) ? Cesium.Cartesian3.clone(v!) : Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+/**
+ * Returns true if the vector is valid (not NaN or near-zero).
+ */
+export function isValidVec(vec: Cesium.Cartesian3): boolean {
+  const mag = Cesium.Cartesian3.magnitude(vec);
+  return isFinite(mag) && mag > 1e-6;
+}
 
-/** Safe add (returns ZERO when either operand is invalid) */
-export const safeAdd = (
-  a?: Cesium.Cartesian3,
-  b?: Cesium.Cartesian3,
-): Cesium.Cartesian3 =>
-  Cesium.Cartesian3.add(safeClone(a), safeClone(b), new Cesium.Cartesian3());
+/**
+ * Clones the vector or returns a safe fallback if invalid.
+ */
+export function safeClone(vec: Cesium.Cartesian3): Cesium.Cartesian3 {
+  return isValidVec(vec) ? Cesium.Cartesian3.clone(vec) : new Cesium.Cartesian3(0, 0, 1);
+}
 
-/** Safe multiply‑by‑scalar (ZERO when vec invalid or scalar non‑finite) */
-export const safeMul = (
-  v?: Cesium.Cartesian3,
-  s: number = 0,
-): Cesium.Cartesian3 =>
-  Number.isFinite(s)
-    ? Cesium.Cartesian3.multiplyByScalar(safeClone(v), s, new Cesium.Cartesian3())
-    : Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+/**
+ * Adds two vectors safely.
+ */
+export function safeAdd(a: Cesium.Cartesian3, b: Cesium.Cartesian3): Cesium.Cartesian3 {
+  return Cesium.Cartesian3.add(a || new Cesium.Cartesian3(), b || new Cesium.Cartesian3(), new Cesium.Cartesian3());
+}
+
+/**
+ * Multiplies a vector by a scalar safely.
+ */
+export function safeMul(vec: Cesium.Cartesian3, scalar: number): Cesium.Cartesian3 {
+  return Cesium.Cartesian3.multiplyByScalar(vec || new Cesium.Cartesian3(), scalar, new Cesium.Cartesian3());
+}
