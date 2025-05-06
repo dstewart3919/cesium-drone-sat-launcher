@@ -11,6 +11,21 @@ const G = 6.67430e-11;
 const EARTH_MASS = 5.972e24;
 const EARTH_RADIUS = 6.371e6;
 
+// Helpers
+const isValidVec = (v?: Cesium.Cartesian3) =>
+  Cesium.defined(v) && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+
+const safeClone = (v?: Cesium.Cartesian3) =>
+  isValidVec(v) ? Cesium.Cartesian3.clone(v!) : Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+
+const safeAdd = (a?: Cesium.Cartesian3, b?: Cesium.Cartesian3) =>
+  Cesium.Cartesian3.add(safeClone(a), safeClone(b), new Cesium.Cartesian3());
+
+const safeMul = (v?: Cesium.Cartesian3, s: number = 0) =>
+  Number.isFinite(s)
+    ? Cesium.Cartesian3.multiplyByScalar(safeClone(v), s, new Cesium.Cartesian3())
+    : Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+
 function App() {
   const viewerRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<Cesium.Viewer | null>(null);
@@ -27,76 +42,64 @@ function App() {
       if (destroyed) return;
       viewerInstanceRef.current = viewer;
 
-      // PHYSICS LOOP
       viewer.clock.onTick.addEventListener(() => {
         const dt = 1;
 
         for (const sat of activeSats) {
-          const rVec = Cesium.Cartesian3.clone(sat.position);
-          const r = Cesium.Cartesian3.magnitude(rVec);
-          const rDir = Cesium.Cartesian3.normalize(rVec, new Cesium.Cartesian3());
+          if (
+            !isValidVec(sat.position) ||
+            !isValidVec(sat.velocity) ||
+            !isValidVec(sat.acceleration) ||
+            !sat.entity ||
+            !sat.trailEntity
+          ) {
+            console.warn("Skipping invalid satellite:", sat);
+            continue;
+          }
 
-          const gravAccel = Cesium.Cartesian3.multiplyByScalar(
-            rDir,
-            -G * EARTH_MASS / (r * r),
-            new Cesium.Cartesian3()
-          );
+          const rVec = safeClone(sat.position);
+          const r = Cesium.Cartesian3.magnitude(rVec);
+          if (!Number.isFinite(r) || r === 0) continue;
+
+          const rDir = Cesium.Cartesian3.normalize(rVec, new Cesium.Cartesian3());
+          const gravAccel = safeMul(rDir, -G * EARTH_MASS / (r * r));
 
           const altitude = r - EARTH_RADIUS;
-          let drag = new Cesium.Cartesian3(0, 0, 0);
-          if (altitude < 100000 && altitude > 0) {
-            const dragFactor = 0.000001 * (1 - altitude / 100000);
-            drag = Cesium.Cartesian3.multiplyByScalar(sat.velocity, -dragFactor, new Cesium.Cartesian3());
-          }
+          const drag =
+            altitude > 0 && altitude < 100000
+              ? safeMul(sat.velocity, -0.000001 * (1 - altitude / 100000))
+              : Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
 
-          let burn = new Cesium.Cartesian3(0, 0, 0);
-          if (sat.burnTime > 0) {
-            burn = sat.acceleration;
-            sat.burnTime -= dt;
-          }
+          const burn =
+            sat.burnTime > 0
+              ? safeClone(sat.acceleration)
+              : Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+          if (sat.burnTime > 0) sat.burnTime -= dt;
 
-          const totalAccel = Cesium.Cartesian3.add(
-            burn,
-            Cesium.Cartesian3.add(gravAccel, drag, new Cesium.Cartesian3()),
-            new Cesium.Cartesian3()
-          );
-
-          sat.velocity = Cesium.Cartesian3.add(
-            sat.velocity,
-            Cesium.Cartesian3.multiplyByScalar(totalAccel, dt, new Cesium.Cartesian3()),
-            new Cesium.Cartesian3()
-          );
-
-          sat.position = Cesium.Cartesian3.add(
-            sat.position,
-            Cesium.Cartesian3.multiplyByScalar(sat.velocity, dt, new Cesium.Cartesian3()),
-            new Cesium.Cartesian3()
-          );
+          const totalAccel = safeAdd(safeAdd(gravAccel, drag), burn);
+          sat.velocity = safeAdd(sat.velocity, safeMul(totalAccel, dt));
+          sat.position = safeAdd(sat.position, safeMul(sat.velocity, dt));
 
           const newR = Cesium.Cartesian3.magnitude(sat.position);
           if (newR < EARTH_RADIUS) {
-            sat.velocity = new Cesium.Cartesian3(0, 0, 0);
-            sat.acceleration = new Cesium.Cartesian3(0, 0, 0);
-            sat.position = Cesium.Cartesian3.multiplyByScalar(
+            sat.velocity = Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+            sat.acceleration = Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO);
+            sat.position = safeMul(
               Cesium.Cartesian3.normalize(sat.position, new Cesium.Cartesian3()),
               EARTH_RADIUS
             );
           }
 
-          // Only update trail if position changed
-const last = sat.trailPositions[sat.trailPositions.length - 1];
-if (!last || !Cesium.Cartesian3.equals(sat.position, last)) {
-  sat.trailPositions.push(Cesium.Cartesian3.clone(sat.position));
-  if (sat.trailPositions.length > 300) sat.trailPositions.shift();
-}
+          const last = sat.trailPositions[sat.trailPositions.length - 1];
+          if (!last || !Cesium.Cartesian3.equals(sat.position, last)) {
+            sat.trailPositions.push(Cesium.Cartesian3.clone(sat.position));
+            if (sat.trailPositions.length > 300) sat.trailPositions.shift();
+          }
 
-// 🛑 Avoid Cesium crash: only assign polyline if 2+ positions
-if (sat.trailPositions.length >= 2) {
-  sat.trailEntity.polyline!.positions = sat.trailPositions.slice();
-}
+          if (sat.trailPositions.length >= 2) {
+            sat.trailEntity.polyline!.positions = sat.trailPositions.slice();
+          }
 
-
-          // Status
           const speed = Cesium.Cartesian3.magnitude(sat.velocity);
           const escapeV = Math.sqrt((2 * G * EARTH_MASS) / (EARTH_RADIUS + altitude));
           if (altitude < 10000 && speed < 100) sat.status = 'crashing';
@@ -108,6 +111,7 @@ if (sat.trailPositions.length >= 2) {
           else if (sat.status === 'escaping') color = Cesium.Color.BLUE.withAlpha(0.6);
 
           sat.trailEntity.polyline!.material = color;
+          sat.entity.position = sat.position;
         }
       });
     };
@@ -129,36 +133,55 @@ if (sat.trailPositions.length >= 2) {
         <div ref={viewerRef} style={{ width: '100%', height: '100%' }} />
       </div>
 
-      <div style={{
-        position: 'absolute', top: 20, left: 20, zIndex: 100,
-        background: 'rgba(0,0,0,0.6)', padding: '1em', borderRadius: '10px', color: '#fff'
-      }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 20,
+          left: 20,
+          zIndex: 100,
+          background: 'rgba(0,0,0,0.6)',
+          padding: '1em',
+          borderRadius: '10px',
+          color: '#fff'
+        }}
+      >
         <div style={{ marginBottom: '0.5em' }}>
-          <label>Thrust Power (m/s²): </label>
+          <label htmlFor="thrust">Thrust Power (m/s²): </label>
           <input
+            id="thrust"
             type="number"
+            placeholder="e.g. 600"
+            title="Thrust acceleration upward"
             value={thrustPower}
             onChange={(e) => setThrustPower(Number(e.target.value))}
             style={{ width: '60px' }}
           />
         </div>
         <div style={{ marginBottom: '0.5em' }}>
-          <label>Burn Time (s): </label>
+          <label htmlFor="burn">Burn Time (s): </label>
           <input
+            id="burn"
             type="number"
+            placeholder="e.g. 5"
+            title="How long to apply thrust"
             value={burnTime}
             onChange={(e) => setBurnTime(Number(e.target.value))}
             style={{ width: '60px' }}
           />
         </div>
         <button
-          onClick={() => viewerInstanceRef.current &&
-            launchSatellites(viewerInstanceRef.current, 10, thrustPower, burnTime)}
-          style={{ marginRight: '0.5em' }}
+          onClick={() =>
+            viewerInstanceRef.current &&
+            launchSatellites(viewerInstanceRef.current, 10, thrustPower, burnTime)
+          }
         >
           Launch 10 Sats
         </button>
-        <button onClick={() => viewerInstanceRef.current && jumpToNextSatellite(viewerInstanceRef.current)}>
+        <button
+          onClick={() =>
+            viewerInstanceRef.current && jumpToNextSatellite(viewerInstanceRef.current)
+          }
+        >
           Jump to Next Sat
         </button>
       </div>

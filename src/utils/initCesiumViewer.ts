@@ -29,8 +29,10 @@ export async function initCesiumViewer(container: HTMLElement): Promise<{
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.scene.light = new Cesium.SunLight();
 
-  const defaultPosition = Cesium.Cartesian3.fromDegrees(-79.886646, 40.022376, 300);
-  viewer.scene.camera.setView({ destination: defaultPosition });
+  // ✅ Set neutral Earth orbit view (no building zoom)
+  viewer.scene.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(-80.0, 0.0, 1_000_000), // over equator, 1000km up
+  });
 
   return { viewer };
 }

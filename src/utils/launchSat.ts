@@ -1,76 +1,73 @@
-import {
-  Viewer,
-  Cartesian3,
-  Color,
-  Entity,
-} from 'cesium';
+import * as Cesium from 'cesium';
 
-export type SatStatus = 'orbiting' | 'crashing' | 'escaping';
-
-export interface SatPhysics {
-  position: Cartesian3;
-  velocity: Cartesian3;
-  acceleration: Cartesian3;
+export interface Satellite {
+  entity: Cesium.Entity;
+  trailEntity: Cesium.Entity;
+  position: Cesium.Cartesian3;
+  velocity: Cesium.Cartesian3;
+  acceleration: Cesium.Cartesian3;
   burnTime: number;
-  entity: Entity;
-  trailEntity: Entity;
-  trailPositions: Cartesian3[];
-  status: SatStatus;
+  status: 'orbiting' | 'escaping' | 'crashing';
+  trailPositions: Cesium.Cartesian3[];
+  dead?: boolean;
 }
 
-export const activeSats: SatPhysics[] = [];
+export const activeSats: Satellite[] = [];
 
 export function launchSatellites(
-  viewer: Viewer,
+  viewer: Cesium.Viewer,
   count: number,
-  thrustPower: number,
-  burnTimeSetting: number
+  thrustPower: number = 600,
+  burnDuration: number = 5
 ) {
   for (let i = 0; i < count; i++) {
-    const lon = -80 + Math.random() * 10;
-    const lat = 20 + Math.random() * 10;
-    const alt = 0;
+    const lon = -80 + Math.random() * 2;
+    const lat = 0 + Math.random() * 2;
+    const height = 0;
 
-    const start = Cartesian3.fromDegrees(lon, lat, alt);
-    const angle = Math.random() * Math.PI * 2;
-    const thrust = new Cartesian3(
-      Math.cos(angle) * 10,
-      Math.sin(angle) * 10,
-      thrustPower
+    const position = Cesium.Cartesian3.fromDegrees(lon, lat, height);
+
+    const up = Cesium.Cartesian3.normalize(position, new Cesium.Cartesian3());
+    const skew = Cesium.Cartesian3.fromElements(
+      (Math.random() - 0.5) * 0.1,
+      (Math.random() - 0.5) * 0.1,
+      (Math.random() - 0.5) * 0.1
+    );
+    const acceleration = Cesium.Cartesian3.add(
+      Cesium.Cartesian3.multiplyByScalar(up, thrustPower, new Cesium.Cartesian3()),
+      skew,
+      new Cesium.Cartesian3()
     );
 
-    const trailPositions: Cartesian3[] = [];
+    const satEntity = viewer.entities.add({
+      position: position,
+      point: {
+        pixelSize: 8,
+        color: Cesium.Color.YELLOW.withAlpha(0.9),
+        heightReference: Cesium.HeightReference.NONE,
+      },
+    });
 
     const trailEntity = viewer.entities.add({
       polyline: {
-        positions: trailPositions,
-        width: 2,
-        material: Color.GRAY.withAlpha(0.5),
+        positions: [],
+        width: 1.5,
+        material: Cesium.Color.GREEN.withAlpha(0.6),
+        clampToGround: false,
       },
     });
 
-    const entity = viewer.entities.add({
-      name: `Orbiter ${i + 1}`,
-      position: start,
-      ellipsoid: {
-        radii: new Cartesian3(10000, 10000, 10000),
-        material: Color.fromRandom({ alpha: 0.9 }),
-      },
-    });
-
-    const sat: SatPhysics = {
-      position: Cartesian3.clone(start),
-      velocity: new Cartesian3(0, 0, 0),
-      acceleration: thrust,
-      burnTime: burnTimeSetting,
-      entity,
+    const sat: Satellite = {
+      entity: satEntity,
       trailEntity,
-      trailPositions,
+      position,
+      velocity: new Cesium.Cartesian3(0, 0, 0),
+      acceleration,
+      burnTime: burnDuration,
       status: 'orbiting',
+      trailPositions: [Cesium.Cartesian3.clone(position)],
     };
 
     activeSats.push(sat);
   }
-
-  viewer.scene.requestRender();
 }
