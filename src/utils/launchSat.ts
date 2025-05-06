@@ -1,7 +1,19 @@
 import * as Cesium from "cesium";
 import { vecSafe } from "./vecSafe";
 
-export let activeSats: any[] = [];
+export interface SatData {
+  position: Cesium.Cartesian3;
+  velocity: Cesium.Cartesian3;
+  acceleration: Cesium.Cartesian3;
+  burnTime: number;
+  trailEntity: Cesium.Entity;
+  trailPositions: Cesium.Cartesian3[];
+  entity: Cesium.Entity;
+  status: string;
+  dead: boolean;
+}
+
+export let activeSats: SatData[] = [];
 
 export function launchSatellites(
   viewer: Cesium.Viewer,
@@ -33,6 +45,8 @@ export function launchSatellites(
         thrust,
       ),
     );
+
+    const trailPositions: Cesium.Cartesian3[] = [pos];
 
     const entity = viewer.entities.add({
       position: new Cesium.ConstantPositionProperty(pos),
@@ -69,8 +83,6 @@ export function launchSatellites(
         show: true,
       },
     });
-
-    const trailPositions: Cesium.Cartesian3[] = [pos];
 
     activeSats.push({
       position: pos,
