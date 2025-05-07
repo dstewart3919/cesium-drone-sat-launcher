@@ -23,10 +23,20 @@ export function launchSatellites(
 ) {
   activeSats = activeSats.filter((s) => !s.dead);
 
+  // Launch site coordinates (same as camera setView)
+  const LAUNCH_LON = -80.0;
+  const LAUNCH_LAT = 0.0;
+  const LAUNCH_ALT = 1000;
+
   const center = Cesium.Cartesian3.fromDegrees(
-    0,
-    0,
-    Cesium.Math.nextRandomNumber() * 100 + 10,
+    LAUNCH_LON,
+    LAUNCH_LAT,
+    LAUNCH_ALT + Cesium.Math.nextRandomNumber() * 50,
+  );
+
+  // Get surface normal for launch direction
+  const normalBase = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+    Cesium.Cartesian3.fromDegrees(LAUNCH_LON, LAUNCH_LAT)
   );
 
   for (let i = 0; i < count; i++) {
@@ -38,12 +48,21 @@ export function launchSatellites(
     );
     const pos = Cesium.Cartesian3.add(center, offset, new Cesium.Cartesian3());
 
-    const burnVector = vecSafe(
-      new Cesium.Cartesian3(
-        Cesium.Math.nextRandomNumber() * thrust * 0.3,
-        Cesium.Math.nextRandomNumber() * thrust * 0.3,
-        thrust,
-      ),
+    // Slight randomness in launch direction
+    const randomOffset = new Cesium.Cartesian3(
+      Cesium.Math.nextRandomNumber() * 0.1,
+      Cesium.Math.nextRandomNumber() * 0.1,
+      Cesium.Math.nextRandomNumber() * 0.1
+    );
+    const finalDirection = Cesium.Cartesian3.add(
+      normalBase,
+      randomOffset,
+      new Cesium.Cartesian3()
+    );
+    const burnVector = Cesium.Cartesian3.multiplyByScalar(
+      vecSafe(finalDirection),
+      thrust,
+      new Cesium.Cartesian3()
     );
 
     const trailPositions: Cesium.Cartesian3[] = [pos];
