@@ -1,58 +1,23 @@
-import * as Cesium from "cesium";
 import { activeSats } from "./launchSat";
 
-let cameraIndex = 0;
-let viewerInstance: Cesium.Viewer | null = null;
-let cameraActive = false;
+export let cameraIndex = 0;
+export let cameraActive = false;
 
-export function attachChaseCamera(viewer: Cesium.Viewer) {
-  viewerInstance = viewer;
-  cameraIndex = 0;
+export function startChaseCamera() {
   cameraActive = true;
-  console.log("[Camera] Attached chase camera.");
-}
-
-export function startChaseCamera(viewer?: Cesium.Viewer) {
-  if (viewer) viewerInstance = viewer;
-  if (!viewerInstance) {
-    console.warn("[Camera] No viewer instance to start chase camera.");
-    return;
-  }
-  cameraActive = true;
-  console.log("[Camera] Chase camera enabled.");
+  console.log(`[Camera] Enabled tracking for satellite ${cameraIndex}.`);
 }
 
 export function stopChaseCamera() {
   cameraActive = false;
-  console.log("[Camera] Chase camera disabled.");
+  console.log("[Camera] Chase mode disabled.");
 }
 
-export function jumpToNextSatellite(viewer?: Cesium.Viewer) {
-  const v = viewer || viewerInstance;
-  if (!v || !activeSats.length) return;
+export function jumpToNextSatellite() {
+  if (!activeSats.length) return;
 
+  cameraActive = true;
   cameraIndex = (cameraIndex + 1) % activeSats.length;
-  const sat = activeSats[cameraIndex];
-  if (!sat?.position) return;
 
-  const direction = Cesium.Cartesian3.normalize(
-    sat.position,
-    new Cesium.Cartesian3()
-  );
-  const destination = Cesium.Cartesian3.multiplyByScalar(
-    direction,
-    100000,
-    new Cesium.Cartesian3()
-  );
-
-  v.camera.flyTo({
-    destination,
-    orientation: {
-      heading: 0,
-      pitch: -Cesium.Math.PI_OVER_TWO,
-      roll: 0,
-    },
-  });
-
-  console.log(`[Camera] Jumped to satellite ${cameraIndex}.`);
+  console.log(`[Camera] Jumped to satellite ${cameraIndex} and ${cameraActive ? "started" : "previewed"} tracking.`);
 }

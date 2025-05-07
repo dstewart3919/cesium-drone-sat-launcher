@@ -7,6 +7,9 @@ import { launchSatellites, activeSats } from "./utils/launchSat";
 import {
   jumpToNextSatellite,
   startChaseCamera,
+  stopChaseCamera,
+  cameraIndex,
+  cameraActive,
 } from "./utils/CameraSatCycle";
 import { vecSafe } from "./utils/vecSafe";
 
@@ -85,6 +88,10 @@ function App() {
             sat.position = newPosition;
             sat.entity.position = new Cesium.ConstantPositionProperty(sat.position);
 
+            if (sat._positionProp) {
+              sat._positionProp.addSample(Cesium.JulianDate.now(), sat.position);
+            }
+
             const newR = Cesium.Cartesian3.magnitude(sat.position);
             if (newR < EARTH_RADIUS) {
               sat.velocity = new Cesium.Cartesian3(0, 0, 0);
@@ -137,8 +144,35 @@ function App() {
           }
 
           if (needsRender && viewerInstanceRef.current) {
-            viewerInstanceRef.current.scene.requestRender();
-          }
+  // ✅ Manually track camera if chase is active
+  if (cameraActive && activeSats[cameraIndex] && !activeSats[cameraIndex].dead) {
+    const sat = activeSats[cameraIndex];
+    const viewer = viewerInstanceRef.current;
+    if (!viewer) return;
+  
+    const satPos = sat.position;
+    const toEarthWorld = Cesium.Cartesian3.negate(satPos, new Cesium.Cartesian3());
+    Cesium.Cartesian3.normalize(toEarthWorld, toEarthWorld);
+    
+    // Create ENU transform matrix
+    const transform = Cesium.Transforms.eastNorthUpToFixedFrame(satPos);
+    
+    // Invert the transform to convert global vector to local offset
+    const invTransform = Cesium.Matrix4.inverse(transform, new Cesium.Matrix4());
+    const toEarthLocal = Cesium.Matrix4.multiplyByPointAsVector(invTransform, toEarthWorld, new Cesium.Cartesian3());
+    
+    // Scale back a bit (distance away from satellite)
+    const offset = Cesium.Cartesian3.multiplyByScalar(toEarthLocal, -1000.0, new Cesium.Cartesian3());
+    
+    // Finally look at the satellite with offset pointing toward Earth
+    viewerInstanceRef.current.scene.camera.lookAtTransform(transform, offset);
+    
+  }
+  
+  
+  
+  viewerInstanceRef.current.scene.requestRender();
+}
         });
       } catch (e) {
         console.error("Cesium viewer setup failed:", e);
@@ -162,7 +196,6 @@ function App() {
         <div ref={viewerRef} style={{ width: "100%", height: "100%" }} />
       </div>
 
-      {/* Flicker-safe UI overlay */}
       <div
         style={{
           position: "absolute",
@@ -212,17 +245,17 @@ function App() {
           <button
             onClick={() => {
               if (viewerInstanceRef.current) {
-                launchSatellites(viewerInstanceRef.current, 10, thrustPower, burnTime);
+                launchSatellites(viewerInstanceRef.current, 1, thrustPower, burnTime);
               }
             }}
             style={{ marginRight: "0.5em", background: "#2a6d9e", border: "none", padding: "8px 12px" }}
           >
-            Launch 10 Sats
+            Launch Satellite
           </button>
           <button
             onClick={() => {
               if (viewerInstanceRef.current) {
-                jumpToNextSatellite(viewerInstanceRef.current);
+                jumpToNextSatellite();
               }
             }}
             style={{ background: "#2a6d9e", border: "none", padding: "8px 12px" }}
@@ -233,12 +266,20 @@ function App() {
             <button
               onClick={() => {
                 if (viewerInstanceRef.current) {
-                  startChaseCamera(viewerInstanceRef.current);
+                  startChaseCamera();
                 }
               }}
               style={{ marginRight: "0.5em", background: "#2a9e6d", border: "none", padding: "8px 12px" }}
             >
               Enable Chase Camera
+            </button>
+            <button
+              onClick={() => {
+                stopChaseCamera();
+              }}
+              style={{ background: "#9e2a2a", border: "none", padding: "8px 12px" }}
+            >
+              Disable Chase Camera
             </button>
           </div>
         </div>

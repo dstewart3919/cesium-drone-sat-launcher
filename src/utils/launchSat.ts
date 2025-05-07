@@ -11,6 +11,10 @@ export interface SatData {
   entity: Cesium.Entity;
   status: string;
   dead: boolean;
+
+  // ✅ Optional properties for chase camera tracking
+  chaseEntity?: Cesium.Entity;
+  _positionProp?: Cesium.SampledPositionProperty;
 }
 
 export let activeSats: SatData[] = [];
@@ -19,11 +23,10 @@ export function launchSatellites(
   viewer: Cesium.Viewer,
   count: number,
   thrust = 600,
-  burnTime = 5,
+  burnTime = 15,
 ) {
   activeSats = activeSats.filter((s) => !s.dead);
 
-  // Launch site coordinates (same as camera setView)
   const LAUNCH_LON = -80.0;
   const LAUNCH_LAT = 0.0;
   const LAUNCH_ALT = 1000;
@@ -32,11 +35,6 @@ export function launchSatellites(
     LAUNCH_LON,
     LAUNCH_LAT,
     LAUNCH_ALT + Cesium.Math.nextRandomNumber() * 50,
-  );
-
-  // Get surface normal for launch direction
-  const normalBase = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
-    Cesium.Cartesian3.fromDegrees(LAUNCH_LON, LAUNCH_LAT)
   );
 
   for (let i = 0; i < count; i++) {
@@ -48,19 +46,24 @@ export function launchSatellites(
     );
     const pos = Cesium.Cartesian3.add(center, offset, new Cesium.Cartesian3());
 
-    // Slight randomness in launch direction
-    const randomOffset = new Cesium.Cartesian3(
-      Cesium.Math.nextRandomNumber() * 0.1,
-      Cesium.Math.nextRandomNumber() * 0.1,
-      Cesium.Math.nextRandomNumber() * 0.1
-    );
-    const finalDirection = Cesium.Cartesian3.add(
-      normalBase,
-      randomOffset,
+    // Surface normal (up)
+    const surfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(pos);
+
+    // Local east vector (perpendicular to normal)
+    const eastVec = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.cross(Cesium.Cartesian3.UNIT_Z, surfaceNormal, new Cesium.Cartesian3()),
       new Cesium.Cartesian3()
     );
+
+    // Launch direction: 60% up, 80% east
+    const launchDir = Cesium.Cartesian3.add(
+      Cesium.Cartesian3.multiplyByScalar(surfaceNormal, 0.6, new Cesium.Cartesian3()),
+      Cesium.Cartesian3.multiplyByScalar(eastVec, 0.8, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+
     const burnVector = Cesium.Cartesian3.multiplyByScalar(
-      vecSafe(finalDirection),
+      vecSafe(launchDir),
       thrust,
       new Cesium.Cartesian3()
     );
